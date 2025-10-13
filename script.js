@@ -31,36 +31,98 @@ fitStage();
     win: $('screen-win'),
   };
 
-  /* ====== サウンド ====== */
-  const createAudio = (src, { volume = 1, loop = false } = {}) => {
-    const a = new Audio(src);
-    a.preload = 'auto';
-    a.volume = volume;
-    a.loop = loop;
-    return a;
+// ===== サウンド =====
+const createAudio = (src, { volume = 1, loop = false } = {}) => {
+  const a = new Audio(src);
+  a.preload = 'auto';
+  a.volume = volume;
+  a.loop = loop;
+  return a;
+};
+
+const sounds = {
+  win:  createAudio('./当たり音.mp3'),
+  lose: createAudio('./外れ音.mp3'),
+  draw: createAudio('./抽選音.mp3', { loop: true }),
+  tickSrc: './読み込み音.mp3',  // ← 読み込み音
+};
+
+// ★ クリック解錠 + 事前起動
+let audioUnlocked = false;
+
+// ---- (A) WebAudio（あればこちらを優先） ----
+let ac = null;           // AudioContext
+let tickBuffer = null;   // 読み込み音のデコード済みバッファ
+
+async function initWebAudio() {
+  try {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    const res = await fetch(sounds.tickSrc);
+    const arr = await res.arrayBuffer();
+    // iOSでたまに Promise じゃないので両対応
+    tickBuffer = await new Promise((resolve, reject) => {
+      const done = (buf) => resolve(buf);
+      const err  = (e)   => reject(e);
+      const r = ac.decodeAudioData(arr, done, err);
+      if (r && typeof r.then === 'function') r.then(done).catch(err);
+    });
+  } catch (e) {
+    ac = null; tickBuffer = null;
+  }
+}
+
+function playTickWebAudio() {
+  if (!ac || !tickBuffer) return false;
+  try {
+    if (ac.state !== 'running') ac.resume();
+    const src  = ac.createBufferSource();
+    const gain = ac.createGain();
+    gain.gain.value = 1;
+    src.buffer = tickBuffer;
+    src.connect(gain).connect(ac.destination);
+    src.start();
+    return true;
+  } catch { return false; }
+}
+
+// ---- (B) HTMLAudio プール（WebAudio失敗時のフォールバック） ----
+const TICK_POOL_SIZE = 6;
+const tickPool = Array.from({ length: TICK_POOL_SIZE }, () => createAudio(sounds.tickSrc));
+let tickIdx = 0;
+function playTickHTMLAudio() {
+  const a = tickPool[tickIdx++ % TICK_POOL_SIZE];
+  try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
+}
+
+// 共通：読み込み音を鳴らす
+function playTick() {
+  // 可能ならWebAudio、だめならプール
+  if (!playTickWebAudio()) playTickHTMLAudio();
+}
+
+// 最初のユーザー操作で全て解錠 & 事前起動
+async function unlockAndPrimeAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+
+  // WebAudio 初期化（失敗してもOK）
+  await initWebAudio();
+
+  // HTMLAudio も無音で起動しておく（iOSの制限回避）
+  const prime = async (a) => {
+    try { a.muted = true; a.currentTime = 0; await a.play(); a.pause(); a.muted = false; a.currentTime = 0; } catch {}
   };
-  const sounds = {
-    win:  createAudio('./当たり音.mp3', { volume: 1 }),
-    lose: createAudio('./外れ音.mp3',   { volume: 1 }),
-    draw: createAudio('./抽選音.mp3',   { volume: 1, loop: true }),
-    tickSrc: './読み込み音.mp3',
-  };
-  let audioUnlocked = false;
-  const unlockAndPrimeAudio = async () => {
-    if (audioUnlocked) return;
-    audioUnlocked = true;
-    const prime = async (a) => { try { a.muted = true; a.currentTime = 0; await a.play(); a.pause(); a.muted = false; a.currentTime = 0; } catch {} };
-    await Promise.all([prime(sounds.win), prime(sounds.lose), prime(sounds.draw)]);
-  };
-  const firstGestureUnlock = () => {
-    unlockAndPrimeAudio();
-    document.removeEventListener('pointerdown', firstGestureUnlock, true);
-    document.removeEventListener('keydown', firstGestureUnlock, true);
-  };
-  document.addEventListener('pointerdown', firstGestureUnlock, true);
-  document.addEventListener('keydown', firstGestureUnlock, true);
-  const playOneShot = (src, v = 1) => { try { const a = new Audio(src); a.volume = v; a.play().catch(()=>{}); } catch {} };
-  const stopDraw = () => { sounds.draw.pause(); sounds.draw.currentTime = 0; };
+  await Promise.all([prime(sounds.win), prime(sounds.lose), prime(sounds.draw), ...tickPool.map(prime)]);
+}
+
+// 任意のユーザー操作で解錠
+const firstGestureUnlock = () => {
+  unlockAndPrimeAudio();
+  document.removeEventListener('pointerdown', firstGestureUnlock, true);
+  document.removeEventListener('keydown', firstGestureUnlock, true);
+};
+document.addEventListener('pointerdown', firstGestureUnlock, true);
+document.addEventListener('keydown', firstGestureUnlock, true);
 
   /* ====== 状態 ====== */
   const selected = { showName:'', showSubtitle:'', showTimeText:'', showTimeStr:'', personCount:0 };
@@ -381,15 +443,16 @@ fitStage();
     }
   }
 
-  function onOneTicketDetected() {
-    const el = $('person-count');
-    selected.personCount = Math.min(99, (selected.personCount || 0) + 1);
-    if (el) {
-      el.textContent = String(selected.personCount);
-      playOneShot(sounds.tickSrc, 1);
-      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
-    }
+function onOneTicketDetected() {
+  const el = document.getElementById('person-count');
+  selected.personCount = Math.min(99, (selected.personCount || 0) + 1);
+  if (el) {
+    el.textContent = String(selected.personCount);
+    playTick(); // ← これだけでOK
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   }
+}
+
 
   /* ====== 初期表示 ====== */
   navigateTo(screens.home);
