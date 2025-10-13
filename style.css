@@ -112,8 +112,43 @@ p{ margin:0; line-height:1.8; }
 .person-toprow{ position:absolute; left:290px; top:190px; display:flex; align-items:center; gap:18px; z-index:2; }
 .final-time{ font-size:1.15rem; font-weight:700; color:#2b1b16; letter-spacing:.05em; margin-left:10px; }
 
-.person-counter{ position:absolute; left:290px; top:280px; display:flex; align-items:center; justify-content:center; gap:0; z-index:2; }
-#person-count{ font-size:3.2rem; font-weight:700; width:120px; text-align:center; }
+/* 人数画面：合計人数 見出し＆下線 */
+.person-total{
+  position: absolute;
+  left: 190px;
+  top: 300px;
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: left;
+  color: #2b1b16;
+}
+.person-total .label{
+  font-size: 2.5rem;
+  letter-spacing: .06em;
+  margin-right: .35em;
+}
+.person-total strong{
+  font-size: 3.2rem;
+  letter-spacing: .04em;
+}
+
+/* ←ココがポイント：テキストだけ右に寄せる（下線は動かさない） */
+.person-total .label,
+.person-total strong{
+  position: relative;
+  left: 80px;        /* 好きなpxに調整 */
+}
+
+.person-total::after{
+  content: "";
+  display: block;
+  margin-top: 12px;
+  width: 430px;
+  height: 2px;
+  background: rgba(0,0,0,.55);
+  border-radius: 1px;
+}
 
 .pop { animation: pop .18s ease-out; }
 @keyframes pop { from { transform: scale(1.0); } 60% { transform: scale(1.12); } to { transform: scale(1.0); } }
@@ -123,18 +158,25 @@ p{ margin:0; line-height:1.8; }
   cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,.3); z-index:2; }
 .confirm-action:active{ transform:translateX(-50%) scale(.98); }
 
-.person-message{ position:absolute; left:35%; bottom:calc(75px + 242px + 20px); transform:translateX(-50%); text-align:center; font-size:1.4rem; line-height:2; margin:0; z-index:2; }
+.person-message{ position:absolute; left:35%; bottom:calc(45px + 242px + 20px); transform:translateX(-50%); text-align:center; font-size:1.4rem; line-height:2; margin:0; z-index:2; }
 
 .person-right-wrap{ position:absolute; right:var(--machine-right); bottom:var(--machine-bottom); width:var(--machine-w); height:var(--machine-h); z-index:2; pointer-events:none; }
 .person-right-bg{ position:absolute; left:0; right:0; bottom:0; width:100%; height:100%; background:url('./lottery machine.png') no-repeat center bottom/contain; opacity:.95; z-index:1; }
 .person-right-note{ position:absolute; left:0; right:0; bottom:calc(100% + var(--note-gap)); width:100%; text-align:center; font-size:1.15rem; line-height:1.9; color:#2b1b16; text-shadow:0 0 6px rgba(255,255,255,.85); margin:0; z-index:3; }
 
+/* 画面が狭い時の調整 */
 @media (max-width:1100px){
   #screen-person-select{ --machine-w:460px; --machine-h:560px; --machine-right:120px; --machine-bottom:0px; }
   .person-toprow{ left:230px; top:180px; }
-  .person-counter{ left:230px; top:260px; }
+  .person-total{ left:230px; top:250px; }
+  .person-total .label,
+  .person-total strong{ left:30px; }      /* モバイル時の寄せ量 */
   .confirm-action{ left:45%; bottom:90px; }
   .person-message{ left:45%; bottom:calc(90px + 242px + 16px); }
+  .person-total::after{ width:360px; }    /* 下線の長さだけ縮める */
+}
+
+.person-total::after{ width: 360px; }
 }
 
 /* 最終確認 */
