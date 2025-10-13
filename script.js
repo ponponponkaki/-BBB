@@ -307,14 +307,27 @@ document.addEventListener('DOMContentLoaded', () => {
   let awaitingNext = false;
   let clearFrames = 0;
 
-  const ensureJsQR = () => new Promise((resolve, reject) => {
+// script.js の ensureJsQR を差し替え
+const ensureJsQR = () => new Promise((resolve, reject) => {
+  if (window.jsQR) return resolve();
+
+  // 1) ローカル優先（オフライン対応）
+  const s1 = document.createElement('script');
+  s1.src = './lib/jsQR.min.js';
+  s1.onload = () => window.jsQR ? resolve() : fallbackCDN();
+  s1.onerror = fallbackCDN;
+  document.head.appendChild(s1);
+
+  function fallbackCDN() {
     if (window.jsQR) return resolve();
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('jsQR load error'));
-    document.head.appendChild(s);
-  });
+    const s2 = document.createElement('script');
+    s2.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+    s2.onload = () => window.jsQR ? resolve() : reject(new Error('jsQR load error'));
+    s2.onerror = () => reject(new Error('jsQR load error'));
+    document.head.appendChild(s2);
+  }
+});
+
 
   async function getPreferredDeviceId(preferFront = true) {
     try {
