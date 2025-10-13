@@ -30,120 +30,185 @@ document.addEventListener('DOMContentLoaded', () => {
     win: $('screen-win'),
   };
 
-  /* ===== サウンド ===== */
-  const createAudio = (src, { volume = 1, loop = false } = {}) => {
-    const a = new Audio(src);
-    a.preload = 'auto';
-    a.volume = volume;
-    a.loop = loop;
-    return a;
-  };
+  /* ===== サウンドエンジン（統一管理） ===== */
+  const Sound = (() => {
+    const files = {
+      win:  './当たり音.mp3',
+      lose: './外れ音.mp3',
+      draw: './抽選音.mp3',       // ループ用
+      tick: './読み込み音.mp3',   // 連打ワンショット
+    };
 
-  const sounds = {
-    win:  createAudio('./当たり音.mp3'),
-    lose: createAudio('./外れ音.mp3'),
-    draw: createAudio('./抽選音.mp3', { loop: true }),   // ループだが必要時のみ再生
-    tickSrc: './読み込み音.mp3',                         // 読み込み音（WebAudio優先）
-  };
+    // WebAudio
+    let ac = null;
+    const buffers = {};      // { key: AudioBuffer }
+    const loopNodes = {};    // { key: {src, gain} } ループ再生中だけ持つ
+    const oneShotGain = 0.9; // ワンショ音量
+    const loopGain    = 1.0; // ループ音量
 
-  // 抽選音を確実に止める（どこからでも呼べるように定義）
-  function stopDraw(){
-    try {
-      sounds.draw.pause();
-      sounds.draw.currentTime = 0;
-    } catch {}
-  }
+    // HTMLAudio フォールバック
+    const htmlSingleton = { win: null, lose: null, draw: null };
+    const TICK_POOL = 6;
+    const tickPool = Array.from({ length: TICK_POOL }, () => new Audio(files.tick));
+    let tickIdx = 0;
 
-  // ★ クリック解錠 + 事前起動（iOS対策）
-  let audioUnlocked = false;
+    let unlocked = false;
 
-  // ---- (A) WebAudio（あればこちらを優先） ----
-  let ac = null;           // AudioContext
-  let tickBuffer = null;   // 読み込み音のデコード済みバッファ
-
-  async function initWebAudio() {
-    try {
-      ac = new (window.AudioContext || window.webkitAudioContext)();
-      const res = await fetch(sounds.tickSrc);
-      const arr = await res.arrayBuffer();
-      // iOSで decodeAudioData が callback 版なことがあるので両対応
-      tickBuffer = await new Promise((resolve, reject) => {
-        const done = (buf) => resolve(buf);
-        const err  = (e)   => reject(e);
-        const r = ac.decodeAudioData(arr, done, err);
-        if (r && typeof r.then === 'function') r.then(done).catch(err);
-      });
-    } catch (e) {
-      ac = null; tickBuffer = null;
-    }
-  }
-
-  function playTickWebAudio() {
-    if (!ac || !tickBuffer) return false;
-    try {
-      if (ac.state !== 'running') ac.resume();
-      const src  = ac.createBufferSource();
-      const gain = ac.createGain();
-      gain.gain.value = 1;
-      src.buffer = tickBuffer;
-      src.connect(gain).connect(ac.destination);
-      src.start();
-      return true;
-    } catch { return false; }
-  }
-
-  // ---- (B) HTMLAudio プール（WebAudio失敗時のフォールバック） ----
-  const TICK_POOL_SIZE = 6;
-  const tickPool = Array.from({ length: TICK_POOL_SIZE }, () => createAudio(sounds.tickSrc));
-  let tickIdx = 0;
-  function playTickHTMLAudio() {
-    const a = tickPool[tickIdx++ % TICK_POOL_SIZE];
-    try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
-  }
-
-  // 共通：読み込み音を鳴らす
-  function playTick() {
-    // 可能ならWebAudio、だめならプール
-    if (!playTickWebAudio()) playTickHTMLAudio();
-  }
-
-  // 最初のユーザー操作で全て解錠 & 事前起動
-  async function unlockAndPrimeAudio() {
-    if (audioUnlocked) return;
-    audioUnlocked = true;
-
-    // WebAudio 初期化（失敗してもOK）
-    await initWebAudio();
-
-    // HTMLAudio も無音で起動しておく（iOSの制限回避）
-    const prime = async (a) => {
+    async function initAC() {
       try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        return true;
+      } catch { ac = null; return false; }
+    }
+
+    async function loadAsBuffer(url) {
+      const res = await fetch(url);
+      const arr = await res.arrayBuffer();
+      // iOS Safari 旧実装もケア
+      return await new Promise((resolve, reject) => {
+        const ok  = (buf) => resolve(buf);
+        const err = (e)   => reject(e);
+        const r = ac.decodeAudioData(arr, ok, err);
+        if (r && typeof r.then === 'function') r.then(ok).catch(err);
+      });
+    }
+
+    async function primeHTML(a, loop=false) {
+      try {
+        a.loop = !!loop;
         a.muted = true; a.currentTime = 0;
-        await a.play();
-        a.pause();
+        await a.play(); a.pause();
         a.muted = false; a.currentTime = 0;
       } catch {}
+    }
+
+    async function unlock() {
+      if (unlocked) return;
+      unlocked = true;
+
+      // 1) AC 起動
+      await initAC();
+
+      // 2) WebAudio で全音源を事前デコード（失敗したら HTMLAudio に切替）
+      if (ac) {
+        try {
+          buffers.win  = await loadAsBuffer(files.win);
+          buffers.lose = await loadAsBuffer(files.lose);
+          buffers.draw = await loadAsBuffer(files.draw);
+          buffers.tick = await loadAsBuffer(files.tick);
+        } catch {
+          // 失敗時は AC を捨てて HTMLAudio に全面フォールバック
+          try { ac.close(); } catch {}
+          ac = null;
+        }
+      }
+
+      // 3) HTMLAudio 側もプライム（フォールバック用 & iOS解除用）
+      htmlSingleton.win  = new Audio(files.win);
+      htmlSingleton.lose = new Audio(files.lose);
+      htmlSingleton.draw = new Audio(files.draw);
+      await Promise.all([
+        primeHTML(htmlSingleton.win),
+        primeHTML(htmlSingleton.lose),
+        primeHTML(htmlSingleton.draw, true),
+        ...tickPool.map(a => primeHTML(a))
+      ]);
+    }
+
+    function playBuffer(buf, vol=1.0) {
+      if (!ac || !buf) return null;
+      if (ac.state !== 'running') ac.resume().catch(()=>{});
+      const src  = ac.createBufferSource();
+      const gain = ac.createGain();
+      gain.gain.value = vol;
+      src.buffer = buf;
+      src.connect(gain).connect(ac.destination);
+      src.start();
+      return { src, gain };
+    }
+
+    function play(name) {
+      if (ac && buffers[name]) {
+        // win / lose / tick のワンショット
+        const buf = buffers[name];
+        playBuffer(buf, name === 'tick' ? oneShotGain : 1.0);
+      } else {
+        if (name === 'tick') {
+          const a = tickPool[tickIdx++ % TICK_POOL];
+          try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
+        } else {
+          const a = htmlSingleton[name] || new Audio(files[name]);
+          htmlSingleton[name] = a;
+          try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
+        }
+      }
+    }
+
+    function loop(name, on) {
+      if (!on) {
+        // 停止
+        if (ac && loopNodes[name]) {
+          try { loopNodes[name].src.stop(); } catch {}
+          try { loopNodes[name].src.disconnect(); loopNodes[name].gain.disconnect(); } catch {}
+        }
+        if (htmlSingleton[name]) {
+          try { htmlSingleton[name].pause(); } catch {}
+          try { htmlSingleton[name].currentTime = 0; } catch {}
+        }
+        delete loopNodes[name];
+        return;
+      }
+
+      // 再生
+      if (ac && buffers[name]) {
+        // 既に回ってたら一旦止める
+        loop(name, false);
+        const node = playBuffer(buffers[name], loopGain);
+        if (node) {
+          node.src.loop = true;
+          loopNodes[name] = node;
+        }
+      } else {
+        const a = htmlSingleton[name] || new Audio(files[name]);
+        htmlSingleton[name] = a;
+        a.loop = true;
+        try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
+      }
+    }
+
+    function resumeIfSuspended() {
+      if (ac && ac.state !== 'running') {
+        ac.resume().catch(()=>{});
+      }
+    }
+
+    return {
+      unlock,
+      play,                 // Sound.play('win'|'lose'|'tick')
+      loop,                 // Sound.loop('draw', true/false)
+      resumeIfSuspended,    // 可視復帰時など
     };
-    await Promise.all([prime(sounds.win), prime(sounds.lose), prime(sounds.draw), ...tickPool.map(prime)]);
-  }
+  })();
 
-  // 任意のユーザー操作で解錠
-  const firstGestureUnlock = () => {
-    unlockAndPrimeAudio();
-    document.removeEventListener('pointerdown', firstGestureUnlock, true);
-    document.removeEventListener('keydown', firstGestureUnlock, true);
+  // 最初のユーザー操作で解錠
+  const _firstGestureAudioUnlock = () => {
+    Sound.unlock();
+    document.removeEventListener('pointerdown', _firstGestureAudioUnlock, true);
+    document.removeEventListener('keydown', _firstGestureAudioUnlock, true);
+    document.removeEventListener('touchend', _firstGestureAudioUnlock, true);
   };
-  document.addEventListener('pointerdown', firstGestureUnlock, true);
-  document.addEventListener('keydown', firstGestureUnlock, true);
+  document.addEventListener('pointerdown', _firstGestureAudioUnlock, true);
+  document.addEventListener('keydown', _firstGestureAudioUnlock, true);
+  document.addEventListener('touchend', _firstGestureAudioUnlock, true);
 
-  // タブが非表示になったら抽選音を保険で停止
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopDraw();
-  });
+  // 既存互換API（置き換えずに済むように）
+  function stopDraw(){ Sound.loop('draw', false); }
+  function playTick(){ Sound.play('tick'); }
 
   /* ====== 状態 ====== */
   const selected = { showName:'', showSubtitle:'', showTimeText:'', showTimeStr:'', personCount:0 };
   let inactivityTimer;
+  let currentScreen = null; // 可視状態ハンドラ用
 
   /* ====== 画面遷移 ====== */
   function navigateTo(target) {
@@ -152,17 +217,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // 人数画面から離れる前にカメラ停止
     if (target !== screens.personSelect) stopCamera();
 
-    // ★ drawing（抽選中）以外に行くときは必ず抽選音を停止
+    // drawing 以外に行くときは抽選音を止める
     if (target !== screens.drawing) stopDraw();
 
     Object.values(screens).forEach(s => s?.classList?.add('hidden'));
     target?.classList?.remove('hidden');
 
     if (target === screens.win) {
-      try { sounds.win.currentTime = 0; sounds.win.play(); } catch {}
+      Sound.loop('draw', false);
+      Sound.play('win');
       setTimeout(() => navigateTo(screens.home), 15000);
     } else if (target === screens.loseBBB || target === screens.losePirates) {
-      try { sounds.lose.currentTime = 0; sounds.lose.play(); } catch {}
+      Sound.loop('draw', false);
+      Sound.play('lose');
     }
 
     if (target === screens.showTimes) {
@@ -170,7 +237,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (target === screens.personSelect) startCameraAndScan();
+
+    // 最後に現在画面を記録
+    currentScreen = target;
   }
+
+  // === 可視状態の変化でループを整える（Sound と navigateTo 定義後に登録） ===
+  document.addEventListener('visibilitychange', () => {
+    // 非表示→必ず停止、可視→drawing のときだけ再開
+    Sound.resumeIfSuspended();
+    const drawingVisible = !document.hidden && currentScreen === screens.drawing;
+    Sound.loop('draw', drawingVisible);
+  });
+  window.addEventListener('focus',    () => { Sound.resumeIfSuspended(); });
+  window.addEventListener('pageshow', () => { Sound.resumeIfSuspended(); });
 
   /* ====== 当たり画面の文言 ====== */
   function setWinTexts() {
@@ -267,18 +347,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* ====== 抽選開始 ====== */
   $('start-lottery')?.addEventListener('click', async () => {
-    // 万一の残りを掃除
+    // まず保険で止めてから
     stopDraw();
 
-    // すでに再生中なら頭出し、止まってたら再生（多重Play防止）
-    try {
-      if (sounds.draw.paused) {
-        sounds.draw.currentTime = 0;
-        await sounds.draw.play();
-      } else {
-        sounds.draw.currentTime = 0;
-      }
-    } catch {}
+    // AudioContext が suspend されていたら復帰
+    Sound.resumeIfSuspended();
+
+    // ここで確実に抽選ループ開始（HTMLAudio/WebAudioどちらでも）
+    Sound.loop('draw', true);
 
     const sub = $('drawing-show-subtitle'), title = $('drawing-show-name');
     if (sub) {
@@ -291,7 +367,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const isWin = Math.random() < 0.5, delay = isWin ? 1500 : 300;
     setTimeout(() => {
-      // navigateTo 内で drawing 以外に遷移すると stopDraw() が実行される
       if (isWin) { setWinTexts(); navigateTo(screens.win); }
       else { navigateTo(selected.showName === "PIRATES SUMMER BATTLE 'GET WET!'" ? screens.losePirates : screens.loseBBB); }
     }, delay);
@@ -307,27 +382,23 @@ document.addEventListener('DOMContentLoaded', () => {
   let awaitingNext = false;
   let clearFrames = 0;
 
-// script.js の ensureJsQR を差し替え
-const ensureJsQR = () => new Promise((resolve, reject) => {
-  if (window.jsQR) return resolve();
-
-  // 1) ローカル優先（オフライン対応）
-  const s1 = document.createElement('script');
-  s1.src = './lib/jsQR.min.js';
-  s1.onload = () => window.jsQR ? resolve() : fallbackCDN();
-  s1.onerror = fallbackCDN;
-  document.head.appendChild(s1);
-
-  function fallbackCDN() {
+  // jsQR ローダ（オフライン→CDNの順）
+  const ensureJsQR = () => new Promise((resolve, reject) => {
     if (window.jsQR) return resolve();
-    const s2 = document.createElement('script');
-    s2.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-    s2.onload = () => window.jsQR ? resolve() : reject(new Error('jsQR load error'));
-    s2.onerror = () => reject(new Error('jsQR load error'));
-    document.head.appendChild(s2);
-  }
-});
-
+    const s1 = document.createElement('script');
+    s1.src = './lib/jsQR.min.js';
+    s1.onload = () => window.jsQR ? resolve() : fallbackCDN();
+    s1.onerror = fallbackCDN;
+    document.head.appendChild(s1);
+    function fallbackCDN() {
+      if (window.jsQR) return resolve();
+      const s2 = document.createElement('script');
+      s2.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+      s2.onload = () => window.jsQR ? resolve() : reject(new Error('jsQR load error'));
+      s2.onerror = () => reject(new Error('jsQR load error'));
+      document.head.appendChild(s2);
+    }
+  });
 
   async function getPreferredDeviceId(preferFront = true) {
     try {
