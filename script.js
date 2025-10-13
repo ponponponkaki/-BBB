@@ -1,23 +1,22 @@
 // script.js — 完成版：人数画面の裏で連続スキャン（多規格＋jsQR強化）/ 最終確認で停止
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (id) => document.getElementById(id);
-  
-  /* ===== ステージ自動スケール（1280×800基準） ===== */
-function fitStage(){
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const scale = Math.min(vw / 1280, vh / 800);
-  document.documentElement.style.setProperty('--ui-scale', String(scale));
-}
-window.addEventListener('resize', fitStage);
-window.addEventListener('orientationchange', fitStage);
-window.addEventListener('visibilitychange', fitStage);
-fitStage();
 
+  /* ===== ステージ自動スケール（1280×800基準） ===== */
+  function fitStage(){
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const scale = Math.min(vw / 1280, vh / 800);
+    document.documentElement.style.setProperty('--ui-scale', String(scale));
+  }
+  window.addEventListener('resize', fitStage);
+  window.addEventListener('orientationchange', fitStage);
+  window.addEventListener('visibilitychange', fitStage);
+  fitStage();
 
   /* ====== 設定 ====== */
-  const USE_FRONT = true; // 内カメラ優先: true / 外カメラ優先: false
-  const ONE_SHOT_DELAY_FRAMES = 2; // 同じコードを“1枚ずつ”扱うために必要なクリアフレーム数
+  const USE_FRONT = true;           // 内カメラ優先: true / 外カメラ優先: false
+  const ONE_SHOT_DELAY_FRAMES = 2;  // 同じコードを“1枚ずつ”扱うためのクリアフレーム数
 
   /* ====== 画面参照 ====== */
   const screens = {
@@ -31,98 +30,116 @@ fitStage();
     win: $('screen-win'),
   };
 
-// ===== サウンド =====
-const createAudio = (src, { volume = 1, loop = false } = {}) => {
-  const a = new Audio(src);
-  a.preload = 'auto';
-  a.volume = volume;
-  a.loop = loop;
-  return a;
-};
-
-const sounds = {
-  win:  createAudio('./当たり音.mp3'),
-  lose: createAudio('./外れ音.mp3'),
-  draw: createAudio('./抽選音.mp3', { loop: true }),
-  tickSrc: './読み込み音.mp3',  // ← 読み込み音
-};
-
-// ★ クリック解錠 + 事前起動
-let audioUnlocked = false;
-
-// ---- (A) WebAudio（あればこちらを優先） ----
-let ac = null;           // AudioContext
-let tickBuffer = null;   // 読み込み音のデコード済みバッファ
-
-async function initWebAudio() {
-  try {
-    ac = new (window.AudioContext || window.webkitAudioContext)();
-    const res = await fetch(sounds.tickSrc);
-    const arr = await res.arrayBuffer();
-    // iOSでたまに Promise じゃないので両対応
-    tickBuffer = await new Promise((resolve, reject) => {
-      const done = (buf) => resolve(buf);
-      const err  = (e)   => reject(e);
-      const r = ac.decodeAudioData(arr, done, err);
-      if (r && typeof r.then === 'function') r.then(done).catch(err);
-    });
-  } catch (e) {
-    ac = null; tickBuffer = null;
-  }
-}
-
-function playTickWebAudio() {
-  if (!ac || !tickBuffer) return false;
-  try {
-    if (ac.state !== 'running') ac.resume();
-    const src  = ac.createBufferSource();
-    const gain = ac.createGain();
-    gain.gain.value = 1;
-    src.buffer = tickBuffer;
-    src.connect(gain).connect(ac.destination);
-    src.start();
-    return true;
-  } catch { return false; }
-}
-
-// ---- (B) HTMLAudio プール（WebAudio失敗時のフォールバック） ----
-const TICK_POOL_SIZE = 6;
-const tickPool = Array.from({ length: TICK_POOL_SIZE }, () => createAudio(sounds.tickSrc));
-let tickIdx = 0;
-function playTickHTMLAudio() {
-  const a = tickPool[tickIdx++ % TICK_POOL_SIZE];
-  try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
-}
-
-// 共通：読み込み音を鳴らす
-function playTick() {
-  // 可能ならWebAudio、だめならプール
-  if (!playTickWebAudio()) playTickHTMLAudio();
-}
-
-// 最初のユーザー操作で全て解錠 & 事前起動
-async function unlockAndPrimeAudio() {
-  if (audioUnlocked) return;
-  audioUnlocked = true;
-
-  // WebAudio 初期化（失敗してもOK）
-  await initWebAudio();
-
-  // HTMLAudio も無音で起動しておく（iOSの制限回避）
-  const prime = async (a) => {
-    try { a.muted = true; a.currentTime = 0; await a.play(); a.pause(); a.muted = false; a.currentTime = 0; } catch {}
+  /* ===== サウンド ===== */
+  const createAudio = (src, { volume = 1, loop = false } = {}) => {
+    const a = new Audio(src);
+    a.preload = 'auto';
+    a.volume = volume;
+    a.loop = loop;
+    return a;
   };
-  await Promise.all([prime(sounds.win), prime(sounds.lose), prime(sounds.draw), ...tickPool.map(prime)]);
-}
 
-// 任意のユーザー操作で解錠
-const firstGestureUnlock = () => {
-  unlockAndPrimeAudio();
-  document.removeEventListener('pointerdown', firstGestureUnlock, true);
-  document.removeEventListener('keydown', firstGestureUnlock, true);
-};
-document.addEventListener('pointerdown', firstGestureUnlock, true);
-document.addEventListener('keydown', firstGestureUnlock, true);
+  const sounds = {
+    win:  createAudio('./当たり音.mp3'),
+    lose: createAudio('./外れ音.mp3'),
+    draw: createAudio('./抽選音.mp3', { loop: true }),   // ループだが必要時のみ再生
+    tickSrc: './読み込み音.mp3',                         // 読み込み音（WebAudio優先）
+  };
+
+  // 抽選音を確実に止める（どこからでも呼べるように定義）
+  function stopDraw(){
+    try {
+      sounds.draw.pause();
+      sounds.draw.currentTime = 0;
+    } catch {}
+  }
+
+  // ★ クリック解錠 + 事前起動（iOS対策）
+  let audioUnlocked = false;
+
+  // ---- (A) WebAudio（あればこちらを優先） ----
+  let ac = null;           // AudioContext
+  let tickBuffer = null;   // 読み込み音のデコード済みバッファ
+
+  async function initWebAudio() {
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      const res = await fetch(sounds.tickSrc);
+      const arr = await res.arrayBuffer();
+      // iOSで decodeAudioData が callback 版なことがあるので両対応
+      tickBuffer = await new Promise((resolve, reject) => {
+        const done = (buf) => resolve(buf);
+        const err  = (e)   => reject(e);
+        const r = ac.decodeAudioData(arr, done, err);
+        if (r && typeof r.then === 'function') r.then(done).catch(err);
+      });
+    } catch (e) {
+      ac = null; tickBuffer = null;
+    }
+  }
+
+  function playTickWebAudio() {
+    if (!ac || !tickBuffer) return false;
+    try {
+      if (ac.state !== 'running') ac.resume();
+      const src  = ac.createBufferSource();
+      const gain = ac.createGain();
+      gain.gain.value = 1;
+      src.buffer = tickBuffer;
+      src.connect(gain).connect(ac.destination);
+      src.start();
+      return true;
+    } catch { return false; }
+  }
+
+  // ---- (B) HTMLAudio プール（WebAudio失敗時のフォールバック） ----
+  const TICK_POOL_SIZE = 6;
+  const tickPool = Array.from({ length: TICK_POOL_SIZE }, () => createAudio(sounds.tickSrc));
+  let tickIdx = 0;
+  function playTickHTMLAudio() {
+    const a = tickPool[tickIdx++ % TICK_POOL_SIZE];
+    try { a.currentTime = 0; a.play().catch(()=>{}); } catch {}
+  }
+
+  // 共通：読み込み音を鳴らす
+  function playTick() {
+    // 可能ならWebAudio、だめならプール
+    if (!playTickWebAudio()) playTickHTMLAudio();
+  }
+
+  // 最初のユーザー操作で全て解錠 & 事前起動
+  async function unlockAndPrimeAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+
+    // WebAudio 初期化（失敗してもOK）
+    await initWebAudio();
+
+    // HTMLAudio も無音で起動しておく（iOSの制限回避）
+    const prime = async (a) => {
+      try {
+        a.muted = true; a.currentTime = 0;
+        await a.play();
+        a.pause();
+        a.muted = false; a.currentTime = 0;
+      } catch {}
+    };
+    await Promise.all([prime(sounds.win), prime(sounds.lose), prime(sounds.draw), ...tickPool.map(prime)]);
+  }
+
+  // 任意のユーザー操作で解錠
+  const firstGestureUnlock = () => {
+    unlockAndPrimeAudio();
+    document.removeEventListener('pointerdown', firstGestureUnlock, true);
+    document.removeEventListener('keydown', firstGestureUnlock, true);
+  };
+  document.addEventListener('pointerdown', firstGestureUnlock, true);
+  document.addEventListener('keydown', firstGestureUnlock, true);
+
+  // タブが非表示になったら抽選音を保険で停止
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopDraw();
+  });
 
   /* ====== 状態 ====== */
   const selected = { showName:'', showSubtitle:'', showTimeText:'', showTimeStr:'', personCount:0 };
@@ -135,15 +152,16 @@ document.addEventListener('keydown', firstGestureUnlock, true);
     // 人数画面から離れる前にカメラ停止
     if (target !== screens.personSelect) stopCamera();
 
+    // ★ drawing（抽選中）以外に行くときは必ず抽選音を停止
+    if (target !== screens.drawing) stopDraw();
+
     Object.values(screens).forEach(s => s?.classList?.add('hidden'));
     target?.classList?.remove('hidden');
 
     if (target === screens.win) {
-      stopDraw();
       try { sounds.win.currentTime = 0; sounds.win.play(); } catch {}
       setTimeout(() => navigateTo(screens.home), 15000);
     } else if (target === screens.loseBBB || target === screens.losePirates) {
-      stopDraw();
       try { sounds.lose.currentTime = 0; sounds.lose.play(); } catch {}
     }
 
@@ -171,7 +189,10 @@ document.addEventListener('keydown', firstGestureUnlock, true);
       selected.showSubtitle = btn.dataset.showSubtitle || '';
       $('time-select-title')?.replaceChildren(document.createTextNode(selected.showName));
       const sub = $('time-select-subtitle');
-      if (sub) { if (selected.showSubtitle) { sub.textContent = selected.showSubtitle; sub.style.display = 'block'; } else { sub.style.display = 'none'; } }
+      if (sub) {
+        if (selected.showSubtitle) { sub.textContent = selected.showSubtitle; sub.style.display = 'block'; }
+        else { sub.style.display = 'none'; }
+      }
       generateTimeButtons(selected.showName);
       navigateTo(screens.showTimes);
     });
@@ -246,13 +267,34 @@ document.addEventListener('keydown', firstGestureUnlock, true);
 
   /* ====== 抽選開始 ====== */
   $('start-lottery')?.addEventListener('click', async () => {
-    try { sounds.draw.currentTime = 0; await sounds.draw.play(); } catch {}
+    // 万一の残りを掃除
+    stopDraw();
+
+    // すでに再生中なら頭出し、止まってたら再生（多重Play防止）
+    try {
+      if (sounds.draw.paused) {
+        sounds.draw.currentTime = 0;
+        await sounds.draw.play();
+      } else {
+        sounds.draw.currentTime = 0;
+      }
+    } catch {}
+
     const sub = $('drawing-show-subtitle'), title = $('drawing-show-name');
-    if (sub) { if (selected.showSubtitle) { sub.textContent = selected.showSubtitle; sub.style.display = 'block'; } else { sub.style.display = 'none'; } }
+    if (sub) {
+      if (selected.showSubtitle) { sub.textContent = selected.showSubtitle; sub.style.display = 'block'; }
+      else { sub.style.display = 'none'; }
+    }
     if (title) title.textContent = selected.showName;
+
     navigateTo(screens.drawing);
+
     const isWin = Math.random() < 0.5, delay = isWin ? 1500 : 300;
-    setTimeout(() => { if (isWin) { setWinTexts(); navigateTo(screens.win); } else { navigateTo(selected.showName === "PIRATES SUMMER BATTLE 'GET WET!'" ? screens.losePirates : screens.loseBBB); } }, delay);
+    setTimeout(() => {
+      // navigateTo 内で drawing 以外に遷移すると stopDraw() が実行される
+      if (isWin) { setWinTexts(); navigateTo(screens.win); }
+      else { navigateTo(selected.showName === "PIRATES SUMMER BATTLE 'GET WET!'" ? screens.losePirates : screens.loseBBB); }
+    }, delay);
   });
 
   /* ====== QR スキャナ ====== */
@@ -408,11 +450,9 @@ document.addEventListener('keydown', firstGestureUnlock, true);
             qrCtx.restore();
 
             const img  = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
-            code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
-            if (code && code.data) break;
+            const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+            if (code && code.data) { hasCode = true; if (!awaitingNext) onOneTicketDetected(); break; }
           }
-
-          if (code && code.data) { hasCode = true; if (!awaitingNext) onOneTicketDetected(); }
         }
       } catch {}
 
@@ -443,16 +483,15 @@ document.addEventListener('keydown', firstGestureUnlock, true);
     }
   }
 
-function onOneTicketDetected() {
-  const el = document.getElementById('person-count');
-  selected.personCount = Math.min(99, (selected.personCount || 0) + 1);
-  if (el) {
-    el.textContent = String(selected.personCount);
-    playTick(); // ← これだけでOK
-    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  function onOneTicketDetected() {
+    const el = document.getElementById('person-count');
+    selected.personCount = Math.min(99, (selected.personCount || 0) + 1);
+    if (el) {
+      el.textContent = String(selected.personCount);
+      playTick(); // 読み込み音（WebAudio優先）
+      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    }
   }
-}
-
 
   /* ====== 初期表示 ====== */
   navigateTo(screens.home);
