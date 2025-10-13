@@ -1,6 +1,19 @@
 // script.js — 完成版：人数画面の裏で連続スキャン（多規格＋jsQR強化）/ 最終確認で停止
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (id) => document.getElementById(id);
+  
+  /* ===== ステージ自動スケール（1280×800基準） ===== */
+function fitStage(){
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const scale = Math.min(vw / 1280, vh / 800);
+  document.documentElement.style.setProperty('--ui-scale', String(scale));
+}
+window.addEventListener('resize', fitStage);
+window.addEventListener('orientationchange', fitStage);
+window.addEventListener('visibilitychange', fitStage);
+fitStage();
+
 
   /* ====== 設定 ====== */
   const USE_FRONT = true; // 内カメラ優先: true / 外カメラ優先: false

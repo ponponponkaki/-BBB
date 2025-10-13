@@ -1,3 +1,32 @@
+/* 文字の自動拡大を抑止（iPad Safari） */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* 画面全体（セーフエリア対応） */
+#stage{
+  position: fixed;
+  inset: env(safe-area-inset-top) env(safe-area-inset-right)
+         env(safe-area-inset-bottom) env(safe-area-inset-left);
+  display: grid;
+  place-items: center;   /* 中央に置く */
+  background: #000;
+  overflow: hidden;
+}
+
+/* 基準 1280×800 を中央でスケール */
+#stage-inner{
+  width: 1280px;
+  height: 800px;
+  transform: scale(var(--ui-scale, 1));
+  transform-origin: center;
+  position: relative;
+}
+
+/* 各画面は stage-inner 内で全画面に広げる */
+#stage-inner .screen{
+  position: absolute;
+  inset: 0;
+}
+
 /* 基本 */
 body{ margin:0; font-family:'Shippori Mincho',serif; background:#000; overflow:hidden;
   height:100dvh; width:100vw; display:flex; justify-content:center; align-items:center;
