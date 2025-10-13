@@ -176,9 +176,6 @@ p{ margin:0; line-height:1.8; }
   .person-total::after{ width:360px; }    /* 下線の長さだけ縮める */
 }
 
-.person-total::after{ width: 360px; }
-}
-
 /* 最終確認 */
 #screen-final-confirm{ background-image:url('./background-3.jpg'); }
 #screen-final-confirm .win-show-detail-top{ top:82px; left:80px; right:30px; }
