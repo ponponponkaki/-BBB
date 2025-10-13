@@ -257,3 +257,5 @@ p{ margin:0; line-height:1.8; }
 .final-badge::before{ left:-26px; }
 .final-badge::after{ right:-26px; transform:translateY(-50%) scaleX(-1); }
 #screen-final-confirm .final-badge{ font-size:1.15rem; padding:10px 28px 10px 44px; }
+
+
