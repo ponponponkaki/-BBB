@@ -54,12 +54,23 @@ p{ margin:0; line-height:1.8; }
   background:#fff; border:2px solid #c8bda9; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.1); transition:.1s; }
 .show-button:active{ transform:translateY(2px); box-shadow:0 2px 8px rgba(0,0,0,.15); }
 .show-button[data-show-name="BIG BAND BEAT"],
-.show-button[data-show-name="PIRATES SUMMER BATTLE 'GET WET!'"]{ background:transparent !important; border:none !important; box-shadow:none !important; }
-.show-button::before{ content:""; position:absolute; left:-21px; top:55%; transform:translateY(-50%); width:24px; height:24px; border:18px solid #6dd8ff; border-radius:50%; background:transparent; z-index:2; }
-.show-button[data-show-name="PIRATES SUMMER BATTLE 'GET WET!'"] .show-title,
-.show-button[data-show-name="PIRATES SUMMER BATTLE 'GET WET!'"] .show-subtitle{ position:relative; left:20px; }
+/* PIRATES を完全に透明ボタン化（背景・枠・影を消す） */
+#screen-home .show-button[data-show-name*="PIRATES SUMMER"]{
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+#screen-home .show-button[data-show-name*="PIRATES SUMMER"] .show-title,
+#screen-home .show-button[data-show-name*="PIRATES SUMMER"] .show-subtitle{
+  position: relative;
+  left: 20px;
+}
+}
+
+/* 既存の基本テキスト指定は別で */
 .show-subtitle{ font-size:.9em; z-index:3; }
 .show-title{ font-size:2.5em; line-height:1.1; font-weight:700; z-index:3; white-space:nowrap; }
+
 
 .language-buttons-container{ position:absolute; bottom:80px; width:100%; display:flex; justify-content:center; gap:40px; z-index:10; }
 .language-buttons-container .lang-button{ min-width:120px; padding:6px 12px; border-radius:10px; background:rgba(255,255,255,.85); border:1.5px solid rgba(0,0,0,.2);
@@ -69,15 +80,39 @@ p{ margin:0; line-height:1.8; }
 #screen-show-times{ background-image:url('./background-2.jpg'); background-size:cover; background-position:center; background-repeat:no-repeat; color:#000; display:flex; justify-content:center; align-items:center;
   --time-right:200px; --time-top:50px; --time-width:160px; --time-gap:35px; --time-out:-100px; }
 #screen-show-times .time-select-layout-unified{ position:relative; display:flex; flex-direction:row; width:92%; max-width:1300px; padding:40px 0; background:transparent; border:none; box-shadow:none; overflow:visible; }
-#screen-show-times .left-panel-unified{ flex:0 0 52%; text-align:left; padding-left:60px; position:relative; }
-#screen-show-times .left-panel-unified .show-info{ position:absolute; top:-185px; left:30px; }
-#screen-show-times .right-panel-unified-times{ position:absolute; top:var(--time-top); right:var(--time-right); width:var(--time-width);
-  display:flex; flex-direction:column; align-items:flex-end; gap:var(--time-gap); padding:0; }
-.time-show-subtitle{ font-size:1.03rem; letter-spacing:.18em; text-transform:uppercase; opacity:.92; margin-bottom:6px; }
-.time-show-title{ font-size:2.2rem; font-weight:700; letter-spacing:.03em; line-height:1.0; margin:0 0 18px; }
-#screen-show-times .notice-area{ margin-top:8px; max-width:560px; font-size:1.3rem; line-height:2.1; letter-spacing:.03em; transform:translate(240px, -15px); }
-#screen-show-times .notice-area p{ margin:10px 0; }
+/* --- 左側テキストを中央ぞろえにする最小上書き --- */
 
+/* --- 左列テキストだけ中央揃えに（レイアウトは維持） --- */
+#screen-show-times .left-panel-unified{
+  flex: 0 0 52%;
+  text-align: left;
+  padding-left: 60px;            /* 元に戻す */
+  position: relative;            /* 絶対配置基準は維持 */
+}
+
+/* タイトル/サブタイトルのブロックを中央配置 */
+#screen-show-times .left-panel-unified .show-info{
+  position: absolute;            /* 既存どおり */
+  top: -185px;
+  left: 50%;                     /* 左パネル内で中央へ */
+  transform: translateX(-50%);
+  width: calc(100% - 120px);     /* 左右の余白ぶんだけ縮める */
+  text-align: center;            /* 文字を中央揃え */
+}
+
+/* タイトルとサブタイトルも中央に */
+#screen-show-times .time-show-subtitle,
+#screen-show-times .time-show-title{
+  text-align: center;
+}
+
+/* 注意文も中央揃え＆中央配置（transformを解除） */
+#screen-show-times .notice-area{
+  transform: none !important;
+  margin: 12px auto 0;
+  text-align: center;
+  max-width: 560px;
+}
 #screen-show-times .time-button{ width:100%; position:relative; padding:9px 16px; border:1px solid rgba(0,0,0,.08); border-radius:10px; background:rgba(255,255,255,.95);
   box-shadow:0 4px 8px rgba(0,0,0,.10); display:flex; align-items:center; justify-content:flex-start; overflow:visible; }
 #screen-show-times .time-button::before,
@@ -96,12 +131,46 @@ p{ margin:0; line-height:1.8; }
 #screen-show-times .language-buttons-container{ position:absolute; left:20px; bottom:-170px; justify-content:flex-start; gap:18px; width:auto; z-index:5; }
 #screen-show-times .lang-button{ min-width:120px; padding:6px 12px; border-radius:10px; background:rgba(255,255,255,.85); border:1.5px solid rgba(0,0,0,.2); color:#333; font-weight:600; font-size:16px; box-shadow:0 2px 4px rgba(0,0,0,.1); }
 
+/* 1) 右カラム（時間ボタン列）を復活 */
+#screen-show-times{
+  --time-right:200px;
+  --time-top:30px;
+  --time-width:300px;   /* ボタンの列幅 */
+  --time-gap:24px;      /* ボタン間の縦間隔 */
+  --time-out:-100px;    /* 右側の時刻の張り出し量（そのままでOK） */
+}
+
+#screen-show-times .right-panel-unified-times{
+  position: absolute;
+  top: var(--time-top);
+  right: var(--time-right);
+  width: var(--time-width);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--time-gap);      /* 新しめのブラウザ用 */
+  padding: 0;
+}
+
+/* 2) gap非対応ブラウザ用フォールバック（念のため） */
+#screen-show-times .right-panel-unified-times .time-button + .time-button{
+  margin-top: var(--time-gap);
+}
+
+/* ボタン自体は列幅いっぱいに */
+#screen-show-times .time-button{
+  width: 55%;
+}
+
+
 @media (max-width:1024px){
   #screen-show-times{ --time-right:90px; --time-top:150px; --time-width:330px; --time-gap:22px; --time-out:-44px; }
   #screen-show-times .language-buttons-container{ left:40px; bottom:16px; gap:12px; }
-  #screen-show-times .notice-area{ transform:translate(70px, 0); }
+    #screen-show-times .notice-area{
+    transform: none !important;
+    margin: 12px auto 0;
 }
-
+}
 /* 人数 */
 #screen-person-select{ position:relative; width:100%; height:100%; background-image:url('./background-2.jpg'); background-size:cover; background-position:center;
   color:#2b1b16; overflow:hidden; font-family:'Shippori Mincho',serif;
@@ -245,7 +314,7 @@ p{ margin:0; line-height:1.8; }
 
 /* バッジ */
 .final-badge{ position:relative; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 26px 10px 42px;
-  border-radius:999px; background:#fff; border:2px solid #c9d8ee; color:#2c5aa0; font-weight:700; font-size:1.12rem; box-shadow:0 2px 6px rgba(0,0,0,.1);
+  border-radius:999px; background:#fff; border:2px solid #c9d8ee; color:#000; font-weight:700; font-size:1.12rem; box-shadow:0 2px 6px rgba(0,0,0,.1);
   background-image:radial-gradient(circle at 35% 35%, #a9d1ff 0%, #72aee6 60%, #5b8fc7 100%); background-size:12px 12px; background-repeat:no-repeat; background-position:18px 50%; margin-right:14px; }
 .final-badge::before, .final-badge::after{
   content:""; position:absolute; top:50%; transform:translateY(-50%); width:36px; height:26px;
@@ -255,4 +324,69 @@ p{ margin:0; line-height:1.8; }
 .final-badge::after{ right:-26px; transform:translateY(-50%) scaleX(-1); }
 #screen-final-confirm .final-badge{ font-size:1.15rem; padding:10px 28px 10px 44px; }
 
+/* ==== 左カラムの文字サイズだけ調整（追加） ==== */
+:root{
+  --left-title-size:    2.8rem;  /* 「TIP-TOP EASTER」 */
+  --left-subtitle-size: 1.15rem; /* サブタイトル(ある場合)   */
+  --left-body-size:     1.35rem; /* 説明文（段落）          */
+}
+
+/* タイトル／サブタイトル */
+#screen-show-times .time-show-title{
+  font-size: var(--left-title-size);
+  line-height: 1.05;
+}
+#screen-show-times .time-show-subtitle{
+  font-size: var(--left-subtitle-size);
+}
+
+/* 説明文（左の段落） */
+#screen-show-times .notice-area{
+  font-size: var(--left-body-size);
+}
+
+/* 画面が狭い時は少し下げる（任意） */
+@media (max-width:1024px){
+  :root{
+    --left-title-size: 2.4rem;
+    --left-body-size:  1.2rem;
+  }
+}
+
+/* 説明文を少し上へ（値はお好みで） */
+#screen-show-times .notice-area{
+  margin-top: -40px;  /* -10px〜-40pxくらいで調整してね */
+}
+
+/* 画面が狭い時は控えめに（任意） */
+@media (max-width:1024px){
+  #screen-show-times .notice-area{
+    margin-top: -10px;
+  }
+}
+
+
+/* 当たり画面：○○公演バッジ（win-time-tag）を黒文字＆金装飾に */
+#screen-win .win-time-tag{
+  color:#000 !important;            /* 文字を黒 */
+  border-color:#e5d9b0;             /* 縁も少し金寄りに */
+  position:absolute;                /* 既存どおり（疑似要素OK） */
+}
+
+/* 金の装飾（左右の飾りフラッグ） */
+#screen-win .win-time-tag::before,
+#screen-win .win-time-tag::after{
+  content:"";
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  width:36px; height:26px;
+  background:radial-gradient(140% 90% at 50% 50%, #e7d99a 0%, #d7bd6a 55%, #b48a34 100%);
+  clip-path:polygon(0 50%, 25% 0, 95% 0, 75% 50%, 95% 100%, 25% 100%);
+  border:1px solid rgba(120,90,20,.25);
+  border-radius:4px;
+  filter:drop-shadow(0 1px 0 rgba(0,0,0,.1));
+}
+#screen-win .win-time-tag::before{ left:-26px; }
+#screen-win .win-time-tag::after{ right:-26px; transform:translateY(-50%) scaleX(-1); }
 

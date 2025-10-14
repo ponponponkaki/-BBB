@@ -29,6 +29,21 @@ document.addEventListener('DOMContentLoaded', () => {
     losePirates: $('screen-lose-pirates'),
     win: $('screen-win'),
   };
+  
+  // ---- ショーごとの時間設定を一元管理 ----
+const SHOW_TIMES = {
+  'BIG BAND BEAT': [
+    { text: '第2回目公演', str: '13:45' },
+    { text: '第3回目公演', str: '15:15' },
+    { text: '第4回目公演', str: '17:15' },
+    { text: '第5回目公演', str: '18:45' },
+  ],
+  // ←ここを好きな時間に調整してOK
+   'PIRATES SUMMER BATTLE "GET WET!"': [
+    { text: '第2回目公演', str: '11:50' },
+    { text: '第3回目公演', str: '14:50' },
+  ],
+};
 
   /* ===== サウンドエンジン（統一管理） ===== */
   const Sound = (() => {
@@ -242,15 +257,6 @@ document.addEventListener('DOMContentLoaded', () => {
     currentScreen = target;
   }
 
-  // === 可視状態の変化でループを整える（Sound と navigateTo 定義後に登録） ===
-  document.addEventListener('visibilitychange', () => {
-    // 非表示→必ず停止、可視→drawing のときだけ再開
-    Sound.resumeIfSuspended();
-    const drawingVisible = !document.hidden && currentScreen === screens.drawing;
-    Sound.loop('draw', drawingVisible);
-  });
-  window.addEventListener('focus',    () => { Sound.resumeIfSuspended(); });
-  window.addEventListener('pageshow', () => { Sound.resumeIfSuspended(); });
 
   /* ====== 当たり画面の文言 ====== */
   function setWinTexts() {
@@ -279,47 +285,40 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   /* ====== 開演時刻ボタン ====== */
-  function generateTimeButtons(showName) {
-    const panel = document.querySelector('#screen-show-times .right-panel-unified-times'); if (!panel) return;
-    panel.innerHTML = '';
+function generateTimeButtons(showName) {
+  const panel = document.querySelector('#screen-show-times .right-panel-unified-times');
+  if (!panel) return;
+  panel.innerHTML = '';
 
-    const times =
-      showName === 'BIG BAND BEAT'
-        ? [
-            { text: '第2回目公演', str: '13:50' },
-            { text: '第3回目公演', str: '15:20' },
-            { text: '第4回目公演', str: '17:20' },
-            { text: '第5回目公演', str: '18:50' },
-          ]
-        : [
-            { text: '第2回目公演', str: '11:50' },
-            { text: '第3回目公演', str: '14:50' },
-          ];
+  const times = SHOW_TIMES[showName] || [];
+  times.forEach(time => {
+    const el = document.createElement('div');
+    el.className = 'time-button';
+    el.innerHTML = `
+      <span class="time-marker"></span>
+      <span class="time-text">${time.text}</span>
+      <span class="time-str">${time.str}</span>`;
+    el.addEventListener('click', () => {
+      selected.showTimeText = time.text;
+      selected.showTimeStr  = time.str;
+      selected.personCount  = 0;
 
-    times.forEach(time => {
-      const el = document.createElement('div');
-      el.className = 'time-button';
-      el.innerHTML = `
-        <span class="time-marker"></span>
-        <span class="time-text">${time.text}</span>
-        <span class="time-str">${time.str}</span>`;
-      el.addEventListener('click', () => {
-        selected.showTimeText = time.text;
-        selected.showTimeStr  = time.str;
-        selected.personCount  = 0;
+      $('person-show-subtitle')?.replaceChildren(document.createTextNode(selected.showSubtitle || ''));
+      const pTitle = $('person-show-title');
+      if (pTitle) {
+        pTitle.replaceChildren(document.createTextNode(selected.showName || ''));
+        pTitle.classList.toggle('long', (selected.showName || '').length > 22);
+      }
+      $('person-badge')?.replaceChildren(document.createTextNode(selected.showTimeText));
+      $('person-time')?.replaceChildren(document.createTextNode(selected.showTimeStr));
+      $('person-count')?.replaceChildren(document.createTextNode(String(selected.personCount)));
 
-        $('person-show-subtitle')?.replaceChildren(document.createTextNode(selected.showSubtitle || ''));
-        const pTitle = $('person-show-title');
-        if (pTitle) { pTitle.replaceChildren(document.createTextNode(selected.showName || '')); pTitle.classList.toggle('long', (selected.showName || '').length > 22); }
-        $('person-badge')?.replaceChildren(document.createTextNode(selected.showTimeText));
-        $('person-time')?.replaceChildren(document.createTextNode(selected.showTimeStr));
-        $('person-count')?.replaceChildren(document.createTextNode(String(selected.personCount)));
-
-        navigateTo(screens.personSelect);
-      });
-      panel.appendChild(el);
+      navigateTo(screens.personSelect);
     });
-  }
+    panel.appendChild(el);
+  });
+}
+
 
   /* ====== 人数 → 最終確認 ====== */
   $('to-final-confirm')?.addEventListener('click', () => {
@@ -368,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isWin = Math.random() < 0.5, delay = isWin ? 1500 : 300;
     setTimeout(() => {
       if (isWin) { setWinTexts(); navigateTo(screens.win); }
-      else { navigateTo(selected.showName === "PIRATES SUMMER BATTLE 'GET WET!'" ? screens.losePirates : screens.loseBBB); }
+      else { navigateTo(selected.showName === 'PIRATES SUMMER BATTLE "GET WET!"' ? screens.losePirates : screens.loseBBB); }
     }, delay);
   });
 
@@ -580,4 +579,3 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ====== 初期表示 ====== */
   navigateTo(screens.home);
 });
-
