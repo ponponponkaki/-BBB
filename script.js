@@ -293,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ]
         : [
             { text: '第2回目公演', str: '11:50' },
-            { text: '第3回目公演', str: '14:50' },
+            { text: '第3回目公演', str: '14:45' },
           ];
 
     times.forEach(time => {
