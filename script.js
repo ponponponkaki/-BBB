@@ -293,7 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ]
         : [
             { text: '第2回目公演', str: '11:50' },
-            { text: '第3回目公演', str: '14:45' },
+            { text: '第3回目公演', str: '14:50' },
           ];
 
     times.forEach(time => {
@@ -580,3 +580,4 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ====== 初期表示 ====== */
   navigateTo(screens.home);
 });
+
