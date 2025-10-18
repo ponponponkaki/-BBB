@@ -33,10 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---- ショーごとの時間設定を一元管理 ----
 const SHOW_TIMES = {
   'BIG BAND BEAT': [
-    { text: '第2回目公演', str: '13:45' },
-    { text: '第3回目公演', str: '15:15' },
-    { text: '第4回目公演', str: '17:15' },
-    { text: '第5回目公演', str: '18:45' },
+    { text: '第2回目公演', str: '13:50' },
+    { text: '第3回目公演', str: '15:20' },
+    { text: '第4回目公演', str: '17:20' },
+    { text: '第5回目公演', str: '18:50' },
   ],
   // ←ここを好きな時間に調整してOK
    'PIRATES SUMMER BATTLE "GET WET!"': [
@@ -580,3 +580,4 @@ function generateTimeButtons(showName) {
   navigateTo(screens.home);
 
 });
+
