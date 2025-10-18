@@ -241,7 +241,7 @@ const SHOW_TIMES = {
     if (target === screens.win) {
       Sound.loop('draw', false);
       Sound.play('win');
-      setTimeout(() => navigateTo(screens.home), 15000);
+      setTimeout(() => navigateTo(screens.home), 10000);
     } else if (target === screens.loseBBB || target === screens.losePirates) {
       Sound.loop('draw', false);
       Sound.play('lose');
@@ -578,4 +578,5 @@ function generateTimeButtons(showName) {
 
   /* ====== 初期表示 ====== */
   navigateTo(screens.home);
+
 });
